@@ -1,0 +1,1110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hue 运维小工具箱</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 32px 16px;
+  }
+  .card {
+    width: 100%;
+    max-width: 920px;
+    background: #ffffff;
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.25);
+    padding: 28px 32px 32px;
+    height: fit-content;
+  }
+  h1 { font-size: 22px; color: #1f2937; }
+  h1 .emoji { margin-right: 8px; }
+  .subtitle { color: #6b7280; font-size: 13px; margin: 8px 0 18px; line-height: 1.6; }
+
+  /* ===== Tab 导航 ===== */
+  .tabs { display: flex; gap: 4px; border-bottom: 2px solid #eef0f4; margin-bottom: 20px; flex-wrap: wrap; }
+  .tabs button {
+    background: transparent; border: none; cursor: pointer;
+    color: #6b7280; font-size: 14px; font-weight: 600;
+    padding: 10px 16px; border-radius: 10px 10px 0 0; position: relative;
+  }
+  .tabs button:hover { color: #374151; }
+  .tabs button.active { color: #4f46e5; }
+  .tabs button.active::after {
+    content: ''; position: absolute; left: 8px; right: 8px; bottom: -2px;
+    height: 3px; border-radius: 2px;
+    background: linear-gradient(90deg, #667eea, #764ba2);
+  }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+  .panel-title { font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+  .panel-title .hint { font-weight: 400; color: #9ca3af; font-size: 12px; }
+  textarea {
+    width: 100%;
+    height: 230px;
+    border: 1.5px solid #d1d5db;
+    border-radius: 10px;
+    padding: 12px;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.7;
+    color: #111827;
+    resize: vertical;
+    outline: none;
+    transition: border-color .15s;
+    background: #fafafa;
+  }
+  textarea:focus { border-color: #667eea; background: #fff; }
+  textarea#output { background: #f3f4f6; color: #065f46; font-weight: 600; }
+
+  .options {
+    display: flex; flex-wrap: wrap; gap: 10px 18px;
+    margin: 16px 0; padding: 14px 16px;
+    background: #f9fafb; border: 1px solid #e5e7eb;
+    border-radius: 10px; align-items: center;
+  }
+  .opt { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #374151; cursor: pointer; user-select: none; }
+  .opt input[type="checkbox"] { width: 15px; height: 15px; accent-color: #667eea; cursor: pointer; }
+  .opt select, .opt input[type="text"] {
+    border: 1px solid #d1d5db; border-radius: 6px; padding: 5px 8px;
+    font-size: 13px; color: #374151; background: #fff; outline: none;
+  }
+  .opt input[type="text"]:focus, .opt select:focus { border-color: #667eea; }
+  .opt input.mini { width: 130px; }
+  .opt input[type="number"] { width: 74px; }
+
+  .stats { font-size: 13px; color: #4b5563; margin: 4px 0 8px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .badge.blue  { background: #eef2ff; color: #4f46e5; }
+  .badge.green { background: #ecfdf5; color: #059669; }
+  .badge.amber { background: #fffbeb; color: #b45309; }
+  .badge.red   { background: #fef2f2; color: #dc2626; }
+  .invalid {
+    font-size: 12px; color: #b45309; background: #fffbeb;
+    border: 1px solid #fde68a; border-radius: 8px;
+    padding: 8px 12px; margin-top: 10px; display: none;
+    line-height: 1.6; word-break: break-all;
+  }
+  .buttons { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+  button { border: none; border-radius: 10px; padding: 11px 22px; font-size: 14px; font-weight: 600; cursor: pointer; transition: transform .1s, opacity .15s; }
+  button:active { transform: scale(.97); }
+  #copyBtn { background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; }
+  #copyBtn.copied { background: #059669; }
+  #clearBtn, #demoBtn { background: #f3f4f6; color: #374151; }
+  .footer { margin-top: 20px; font-size: 12px; color: #9ca3af; line-height: 1.8; }
+
+  /* ===== 时间戳互转 ===== */
+  .ts-input {
+    width: 100%; border: 1.5px solid #d1d5db; border-radius: 10px;
+    padding: 12px; font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 15px; outline: none; background: #fafafa; color: #111827;
+  }
+  .ts-input:focus { border-color: #667eea; background: #fff; }
+  input[type="datetime-local"] {
+    width: 100%; border: 1.5px solid #d1d5db; border-radius: 10px;
+    padding: 11px 12px; font-size: 15px; outline: none; background: #fafafa; color: #111827;
+  }
+  input[type="datetime-local"]:focus { border-color: #667eea; background: #fff; }
+  .detect { margin: 10px 0 2px; min-height: 24px; }
+
+  /* ===== 结果卡片 ===== */
+  .result-card { border: 1px solid #e5e7eb; border-radius: 10px; margin-top: 12px; overflow: hidden; background: #fff; }
+  .rc-head { display: flex; justify-content: space-between; align-items: center; padding: 7px 8px 7px 12px; background: #f9fafb; border-bottom: 1px solid #eef0f4; }
+  .rc-label { font-size: 12px; font-weight: 700; color: #4f46e5; letter-spacing: .3px; }
+  .rc-copy { font-size: 12px; padding: 5px 12px; border-radius: 7px; background: #eef2ff; color: #4f46e5; }
+  .rc-copy:hover { background: #e0e7ff; }
+  .rc-copy.copied { background: #ecfdf5; color: #059669; }
+  .rc-code {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12.5px; line-height: 1.7; padding: 12px 14px;
+    white-space: pre-wrap; word-break: break-all;
+    color: #065f46; font-weight: 600; background: #f8faf9;
+  }
+  .empty-tip { font-size: 12.5px; color: #9ca3af; margin-top: 10px; }
+
+  /* ===== 表头字段生成器 ===== */
+  .matrix { border-collapse: collapse; font-size: 13px; }
+  .matrix th, .matrix td { border: 1px solid #e5e7eb; padding: 4px 14px; text-align: center; }
+  .matrix th { background: #f9fafb; color: #374151; font-size: 12px; }
+  .matrix td:first-child { text-align: left; font-weight: 600; color: #374151; font-size: 12.5px; }
+  .matrix input[type="checkbox"] { width: 15px; height: 15px; accent-color: #667eea; cursor: pointer; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 7px;
+    background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 8px;
+    padding: 5px 6px 5px 10px; margin: 4px 6px 2px 0;
+    font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 12.5px;
+  }
+  .chip code { color: #1f2937; font-weight: 700; font-family: inherit; }
+  .chip em { color: #9ca3af; font-style: normal; font-size: 11.5px; }
+  .chip button {
+    padding: 0 5px; background: transparent; color: #c0c6d0;
+    font-size: 15px; font-weight: 700; line-height: 1; border-radius: 4px;
+  }
+  .chip button:hover { color: #dc2626; background: #fef2f2; }
+  .chip-note { background: #fffbeb; border-color: #fde68a; color: #b45309; font-family: inherit; font-size: 12px; }
+  #hdrChips { min-height: 30px; margin-top: 4px; }
+  #hdrCopyBtn { background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; }
+  #hdrCopyBtn.copied { background: #059669; }
+  #hdrRestoreBtn, #hdrResetBtn { background: #f3f4f6; color: #374151; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1><span class="emoji">🧰</span>Hue 运维小工具箱</h1>
+  <p class="subtitle">纯本地运行的小工具集合：ID 列表转字符串、Unix 时间戳互转（10位/13位/16位）、时间戳转 SQL（Impala / MySQL 方言，多粒度多写法，一键复制）。</p>
+
+  <nav class="tabs">
+    <button data-tab="id" class="active">🔑 ID String 转换</button>
+    <button data-tab="ts">⏱️ Unix 时间戳互转</button>
+    <button data-tab="sql">🗄️ 时间戳 SQL 转换</button>
+    <button data-tab="part">🗓️ 时间分区筛选</button>
+    <button data-tab="hdr">📋 表头字段生成器</button>
+  </nav>
+
+  <!-- ================= Tab 1: ID String ================= -->
+  <div id="panel-id" class="tab-panel active">
+    <div class="grid">
+      <div>
+        <div class="panel-title">📥 原始输入 <span class="hint">支持换行 / 逗号 / 空格 / 分号</span></div>
+        <textarea id="input" placeholder="例如：&#10;137139225&#10;204513342&#10;556612653&#10;&#10;也支持 137139225, 204513342 这种格式，已有引号会自动剥离"></textarea>
+      </div>
+      <div>
+        <div class="panel-title">📤 格式化结果 <span class="hint">可直接复制</span></div>
+        <textarea id="output" readonly placeholder="结果会实时出现在这里…"></textarea>
+      </div>
+    </div>
+
+    <div class="options">
+      <span class="opt">引号
+        <select id="quoteStyle">
+          <option value="single" selected>单引号 '</option>
+          <option value="double">双引号 "</option>
+          <option value="none">无引号</option>
+        </select>
+      </span>
+      <label class="opt"><input type="checkbox" id="wrapParens"> 包裹括号 ( ) — 用于 SQL IN</label>
+      <label class="opt"><input type="checkbox" id="dedupe" checked> 去重</label>
+      <label class="opt"><input type="checkbox" id="sortNum"> 按数字排序</label>
+      <label class="opt"><input type="checkbox" id="numericOnly" checked> 仅保留纯数字</label>
+    </div>
+
+    <div class="stats" id="stats"></div>
+    <div class="invalid" id="invalidBox"></div>
+
+    <div class="buttons">
+      <button id="copyBtn">📋 复制结果</button>
+      <button id="clearBtn">🗑️ 清空</button>
+      <button id="demoBtn">✨ 填入示例</button>
+    </div>
+    <div class="footer">💡 粘贴后实时转换，无需点按钮；只有一个 ID 时自动不带逗号。</div>
+  </div>
+
+  <!-- ================= Tab 2: Unix 时间戳互转 ================= -->
+  <div id="panel-ts" class="tab-panel">
+    <div class="grid">
+      <div>
+        <div class="panel-title">⏱️ 时间戳 → 日期 <span class="hint">自动识别 10 / 13 / 16 位</span></div>
+        <input type="text" class="ts-input" id="tsInput" placeholder="粘贴时间戳，如 1788516000000 或 1788516000">
+        <div class="detect" id="tsDetect"></div>
+        <div id="tsResults"><div class="empty-tip">输入时间戳后，这里会列出秒 / 毫秒 / 北京时间 / UTC 等全部形式，每项可单独复制。</div></div>
+      </div>
+      <div>
+        <div class="panel-title">📅 日期 → 时间戳 <span class="hint">按北京时间（UTC+8）解析</span></div>
+        <input type="datetime-local" id="dtInput" step="1">
+        <div class="detect" id="dtDetect"></div>
+        <div id="dtResults"><div class="empty-tip">选择日期时间后，这里会给出对应的 10 位秒和 13 位毫秒时间戳。</div></div>
+      </div>
+    </div>
+    <div class="footer">💡 判定规则：≤10 位按秒、11–14 位按毫秒、≥15 位按微秒处理。</div>
+  </div>
+
+  <!-- ================= Tab 3: 时间戳 SQL 转换 ================= -->
+  <div id="panel-sql" class="tab-panel">
+    <div class="options">
+      <span class="opt">变量名 <input type="text" id="sqlVar" class="mini" value="format_date" placeholder="format_date"></span>
+      <span class="opt">别名 as <input type="text" id="sqlAlias" class="mini" placeholder="留空自动生成"></span>
+      <span class="opt">源字段单位
+        <select id="sqlUnit">
+          <option value="ms" selected>毫秒（13位，需 /1000）</option>
+          <option value="s">秒（10位）</option>
+        </select>
+      </span>
+      <span class="opt">粒度
+        <select id="sqlGran">
+          <option value="day" selected>日 yyyy-MM-dd</option>
+          <option value="hour">小时 yyyy-MM-dd HH</option>
+          <option value="minute">分钟 yyyy-MM-dd HH:mm</option>
+          <option value="week">周</option>
+          <option value="month">月 yyyy-MM</option>
+          <option value="year">年 yyyy</option>
+        </select>
+      </span>
+      <span class="opt">方言
+        <select id="sqlDialect">
+          <option value="impala" selected>Impala</option>
+          <option value="mysql">MySQL</option>
+        </select>
+      </span>
+      <label class="opt"><input type="checkbox" id="sqlTz" checked> 东八区转换（+28800）</label>
+    </div>
+
+    <div id="sqlResults"><div class="empty-tip">上方选项即改即得；默认值与你给的示例一致：<code>from_unixtime(cast(format_date / 1000 + 28800 as bigint), 'yyyy-MM-dd') as format_dt</code>。每种写法可单独一键复制。</div></div>
+
+    <div class="footer">
+      💡 同时给出三种写法：当前方言推荐写法、当前方言备选写法（substr / date 简化版）、另一方言对照写法。<br>
+      ⏰ 东八区说明：字段若是 UTC 毫秒时间戳，勾选后表达式内加 <code>+ 28800</code> 秒；Impala 的 <code>from_unixtime</code> 按集群时区格式化，如集群本身是 UTC+8 请勿重复勾选。
+    </div>
+  </div>
+
+  <!-- ================= Tab 4: 时间分区筛选 ================= -->
+  <div id="panel-part" class="tab-panel">
+    <div class="options">
+      <span class="opt">方言
+        <select id="pfDialect">
+          <option value="impala" selected>Impala</option>
+          <option value="mysql">MySQL</option>
+        </select>
+      </span>
+      <span class="opt">输出类型
+        <select id="pfType">
+          <option value="str" selected>字符串日期（分区常用）</option>
+          <option value="ts">Unix 时间戳</option>
+        </select>
+      </span>
+      <span class="opt" id="pfUnitWrap" style="display:none">时间戳单位
+        <select id="pfUnit">
+          <option value="ms" selected>毫秒（结果 ×1000）</option>
+          <option value="s">秒</option>
+        </select>
+      </span>
+      <span class="opt" id="pfFmtWrap">日期格式
+        <select id="pfFmt">
+          <option value="yyyyMMdd" selected>yyyyMMdd</option>
+          <option value="yyyy-MM-dd">yyyy-MM-dd</option>
+          <option value="custom">自定义…</option>
+        </select>
+        <input type="text" id="pfFmtCustom" class="mini" style="display:none" placeholder="如 yyyy-MM-dd HH:mm:ss">
+      </span>
+      <label class="opt"><input type="checkbox" id="pfNow"> 结束边界用 NOW()（实时到当前时刻）</label>
+    </div>
+
+    <div class="options">
+      <span class="opt">快捷区间
+        <select id="pfPreset">
+          <option value="1,0">昨日</option>
+          <option value="7,0">近 7 天（含昨日）</option>
+          <option value="30,0">近 30 天</option>
+          <option value="60,0">近 60 天</option>
+          <option value="90,0" selected>近 90 天（90 日前 ~ 昨日）</option>
+          <option value="90,30">30 ~ 90 日前</option>
+          <option value="custom">自定义…</option>
+        </select>
+      </span>
+      <span class="opt">起始偏移(天) <input type="number" id="pfStart" value="90" min="0"></span>
+      <span class="opt">结束偏移(天) <input type="number" id="pfEnd" value="0" min="0"></span>
+      <span class="opt">字段名 <input type="text" id="pfField" style="width:170px" value="create_timestamp" placeholder="留空 = 不指定字段"></span>
+    </div>
+
+    <div id="pfResults"><div class="empty-tip">选项即改即得；区间语义为左闭右开。每种写法可单独一键复制。</div></div>
+
+    <div class="footer">
+      💡 区间语义：<code>[今天-起始偏移 00:00, 今天-结束偏移 00:00)</code> 左闭右开。结束偏移 0 = 今天零点（即覆盖到昨天全天）；勾选 <code>NOW()</code> 后结束边界变为当前时刻，即你示例的 <code>&lt; UNIX_TIMESTAMP(NOW()) * 1000</code>。<br>
+      💡 字段名留空则只输出表达式本体，字段、比较符由你自己拼；字符串日期且区间恰好一天时，额外给出等值 <code>=</code> 写法（静态分区裁剪最友好）。自定义格式按 Impala/Java 风格填写（如 yyyyMMdd），MySQL 侧自动映射为 DATE_FORMAT 符号。
+    </div>
+  </div>
+
+  <!-- ================= Tab 5: 表头字段生成器 ================= -->
+  <div id="panel-hdr" class="tab-panel">
+    <div class="options">
+      <span class="opt" style="font-weight:700">时间维度</span>
+      <label class="opt"><input type="checkbox" id="hdrTDay" checked> 按天</label>
+      <label class="opt"><input type="checkbox" id="hdrTWeek"> 按自然周 (week_start)</label>
+      <label class="opt"><input type="checkbox" id="hdrTMonth"> 按自然月</label>
+      <label class="opt"><input type="checkbox" id="hdrTHour"> 按小时</label>
+      <span class="opt" style="font-weight:700">输出模式
+        <select id="hdrMode">
+          <option value="wide" selected>宽表模式</option>
+          <option value="type">Type 分类模式</option>
+        </select>
+      </span>
+      <label class="opt"><input type="checkbox" id="hdrComment" checked> 中文注释</label>
+    </div>
+
+    <div class="options">
+      <span class="opt" style="font-weight:700">统计实体</span>
+      <label class="opt"><input type="checkbox" id="hdrE_userId" checked> 用户ID</label>
+      <label class="opt"><input type="checkbox" id="hdrE_userName" checked> 用户昵称 <span style="color:#9ca3af;font-size:11px">昨日分区最新</span></label>
+      <label class="opt"><input type="checkbox" id="hdrE_picoid" checked> 用户PicoID</label>
+      <label class="opt"><input type="checkbox" id="hdrE_anchorId"> 主播ID</label>
+      <label class="opt"><input type="checkbox" id="hdrE_anchorName"> 主播昵称 <span style="color:#9ca3af;font-size:11px">昨日分区最新</span></label>
+      <label class="opt"><input type="checkbox" id="hdrE_guildId"> 公会ID</label>
+      <label class="opt"><input type="checkbox" id="hdrE_guildName"> 公会名称</label>
+      <label class="opt"><input type="checkbox" id="hdrE_roomId"> 房间ID</label>
+      <label class="opt"><input type="checkbox" id="hdrE_roomName"> 房间名称</label>
+      <label class="opt"><input type="checkbox" id="hdrE_roomNumber"> 房间号</label>
+    </div>
+
+    <div class="options" style="align-items:flex-start;gap:26px">
+      <table class="matrix">
+        <tr><th>行为 × 指标</th><th>UV</th><th>PV</th></tr>
+        <tr><td>活跃</td><td><input type="checkbox" id="hdrB_active_uv" checked></td><td><input type="checkbox" id="hdrB_active_pv"></td></tr>
+        <tr><td>进房</td><td><input type="checkbox" id="hdrB_enter_room_uv"></td><td><input type="checkbox" id="hdrB_enter_room_pv"></td></tr>
+        <tr><td>送礼</td><td><input type="checkbox" id="hdrB_send_gift_uv" checked></td><td><input type="checkbox" id="hdrB_send_gift_pv" checked></td></tr>
+        <tr><td>收礼</td><td><input type="checkbox" id="hdrB_receive_gift_uv"></td><td><input type="checkbox" id="hdrB_receive_gift_pv"></td></tr>
+        <tr><td>充值</td><td><input type="checkbox" id="hdrB_recharge_uv" checked></td><td><input type="checkbox" id="hdrB_recharge_pv"></td></tr>
+      </table>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <span class="opt" style="font-weight:700">时长指标</span>
+        <label class="opt"><input type="checkbox" id="hdrDurRoom"> 在房时长 (in_room_duration)</label>
+        <label class="opt"><input type="checkbox" id="hdrDurLive"> 开播时长 (live_duration)</label>
+      </div>
+    </div>
+
+    <div class="options">
+      <span class="opt">统计口径
+        <select id="hdrScope">
+          <option value="all" selected>全部活跃</option>
+          <option value="new">仅当日新增</option>
+          <option value="old">仅非首日</option>
+        </select>
+      </span>
+      <label class="opt"><input type="checkbox" id="hdrSplitNew"> 分新老客拆分 (user_type)</label>
+      <span class="opt" style="font-weight:700">比例指标</span>
+      <label class="opt"><input type="checkbox" id="hdrRateRoom"> 进房率</label>
+      <label class="opt"><input type="checkbox" id="hdrRateGift"> 进房送礼率</label>
+      <label class="opt"><input type="checkbox" id="hdrRatePay"> 付费转化率</label>
+    </div>
+
+    <div class="options">
+      <span class="opt">预设组合
+        <select id="hdrPreset">
+          <option value="">— 选择预设 —</option>
+          <option value="giftDailyType">用户送礼日报 (Type)</option>
+          <option value="anchorLiveWide">主播开播日宽表</option>
+          <option value="guildMonth">公会充值月报</option>
+          <option value="roomDaily">房间进房日报</option>
+        </select>
+      </span>
+      <span class="opt">追加自定义字段 <input type="text" id="hdrCustom" style="width:210px" placeholder="逗号分隔，如 tag,level"></span>
+    </div>
+
+    <div class="stats" id="hdrStats"></div>
+    <div id="hdrChips"></div>
+
+    <div class="buttons">
+      <button id="hdrCopyBtn">📋 复制字段清单</button>
+      <button id="hdrRestoreBtn">↩️ 恢复已删字段</button>
+      <button id="hdrResetBtn">♻️ 重置勾选</button>
+    </div>
+
+    <div class="footer">
+      💡 点字段标签上的 <b>×</b> 可临时删减；改动上方勾选会重新生成全部字段。复制格式跟随「中文注释」开关：注释模式输出 <code>字段 -- 中文说明</code>，可直接贴给 AI 当表头定义。<br>
+      💡 宽表模式：指标按勾选实体加前缀（user_ / anchor_ / guild_ / room_）；Type 模式：单一实体列 + <code>type -- user/anchor</code>，指标不带前缀，公会/房间仍为普通维度列。新老拆分在两种模式下都输出 <code>user_type</code> 列；开播时长固定挂主播侧、在房时长固定挂用户侧。
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ================= 通用：Tab 切换 ================= */
+  var tabBtns = document.querySelectorAll('.tabs button');
+  var panels = document.querySelectorAll('.tab-panel');
+  function activateTab(id) {
+    tabBtns.forEach(function (b) { b.classList.toggle('active', b.dataset.tab === id); });
+    panels.forEach(function (p) { p.classList.toggle('active', p.id === 'panel-' + id); });
+    try { localStorage.setItem('hueToolTab', id); } catch (e) {}
+  }
+  tabBtns.forEach(function (b) {
+    b.addEventListener('click', function () { activateTab(b.dataset.tab); });
+  });
+  var savedTab = null;
+  try { savedTab = localStorage.getItem('hueToolTab'); } catch (e) {}
+  activateTab(savedTab || 'id');
+
+  /* ================= 通用：一键复制 ================= */
+  function copyText(text, btn) {
+    if (!text) return;
+    var oldLabel = btn ? btn.textContent : '';
+    function ok() {
+      if (!btn) return;
+      btn.classList.add('copied');
+      btn.textContent = '✅ 已复制';
+      setTimeout(function () {
+        btn.classList.remove('copied');
+        btn.textContent = oldLabel;
+      }, 1500);
+    }
+    function fallback() {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch (e) {}
+      document.body.removeChild(ta);
+      ok();
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(ok).catch(fallback);
+    } else { fallback(); }
+  }
+
+  function addCard(container, label, code) {
+    var emptyTip = container.querySelector('.empty-tip');
+    if (emptyTip) emptyTip.remove();
+    var div = document.createElement('div');
+    div.className = 'result-card';
+    div.innerHTML =
+      '<div class="rc-head"><span class="rc-label"></span>' +
+      '<button class="rc-copy" type="button">📋 复制</button></div>' +
+      '<pre class="rc-code"></pre>';
+    div.querySelector('.rc-label').textContent = label;
+    div.querySelector('.rc-code').textContent = code;
+    div.querySelector('.rc-copy').addEventListener('click', function () {
+      copyText(code, this);
+    });
+    container.appendChild(div);
+  }
+
+  function clearCards(container, tip) {
+    container.innerHTML = '<div class="empty-tip">' + tip + '</div>';
+  }
+
+  /* ================= Tab 1: ID String 转换 ================= */
+  var inputEl  = document.getElementById('input');
+  var outputEl = document.getElementById('output');
+  var statsEl  = document.getElementById('stats');
+  var invalidBox = document.getElementById('invalidBox');
+  var copyBtn  = document.getElementById('copyBtn');
+  var DEMO = ['137139225', '204513342', '556612653', '450089509'];
+
+  function getOptions() {
+    return {
+      quote: document.getElementById('quoteStyle').value,
+      wrap:  document.getElementById('wrapParens').checked,
+      dedupe: document.getElementById('dedupe').checked,
+      sort:  document.getElementById('sortNum').checked,
+      numericOnly: document.getElementById('numericOnly').checked
+    };
+  }
+
+  function convertIds() {
+    var opts = getOptions();
+    var raw = inputEl.value;
+    var tokens = raw
+      .split(/[\s,;，；、\t]+/)
+      .map(function (t) { return t.trim().replace(/^['"]+|['"]+$/g, ''); })
+      .filter(function (t) { return t.length > 0; });
+
+    var isNum = function (t) { return /^\d+$/.test(t); };
+    var invalid = tokens.filter(function (t) { return !isNum(t); });
+
+    var list = opts.numericOnly ? tokens.filter(isNum) : tokens.slice();
+
+    var dupCount = 0;
+    if (opts.dedupe) {
+      var seen = {};
+      var uniq = [];
+      list.forEach(function (t) {
+        if (!seen[t]) { seen[t] = true; uniq.push(t); } else { dupCount++; }
+      });
+      list = uniq;
+    }
+
+    if (opts.sort) {
+      list.sort(function (a, b) {
+        var na = /^\d+$/.test(a) ? parseInt(a, 10) : NaN;
+        var nb = /^\d+$/.test(b) ? parseInt(b, 10) : NaN;
+        if (!isNaN(na) && !isNaN(nb)) return na - nb;
+        return a < b ? -1 : (a > b ? 1 : 0);
+      });
+    }
+
+    var q = opts.quote === 'single' ? "'" : (opts.quote === 'double' ? '"' : '');
+    var result = list.map(function (id) { return q + id + q; }).join(',');
+    if (opts.wrap && result) result = '(' + result + ')';
+    outputEl.value = result;
+
+    var badges = [];
+    if (tokens.length > 0) {
+      badges.push('<span class="badge blue">识别 ' + tokens.length + ' 项</span>');
+      badges.push('<span class="badge green">输出 ' + list.length + ' 个 ID</span>');
+      if (dupCount > 0) badges.push('<span class="badge amber">去重移除 ' + dupCount + ' 个</span>');
+      if (invalid.length > 0) badges.push('<span class="badge red">非数字 ' + invalid.length + ' 项</span>');
+      if (list.length === 1) badges.push('<span class="badge blue">单项：无逗号 ✓</span>');
+    }
+    statsEl.innerHTML = badges.join(' ');
+
+    if (invalid.length > 0) {
+      var show = invalid.slice(0, 20).join('、') + (invalid.length > 20 ? ' …等 ' + invalid.length + ' 项' : '');
+      invalidBox.style.display = 'block';
+      invalidBox.textContent = '⚠️ 以下内容不是纯数字' + (opts.numericOnly ? '，已被过滤：' : '，已原样保留：') + show;
+    } else {
+      invalidBox.style.display = 'none';
+    }
+  }
+
+  copyBtn.addEventListener('click', function () {
+    var text = outputEl.value;
+    if (!text) return;
+    copyText(text, copyBtn);
+  });
+
+  document.getElementById('clearBtn').addEventListener('click', function () {
+    inputEl.value = '';
+    convertIds();
+    inputEl.focus();
+  });
+
+  document.getElementById('demoBtn').addEventListener('click', function () {
+    inputEl.value = DEMO.join('\n');
+    convertIds();
+  });
+
+  inputEl.addEventListener('input', convertIds);
+  ['quoteStyle', 'wrapParens', 'dedupe', 'sortNum', 'numericOnly'].forEach(function (id) {
+    document.getElementById(id).addEventListener('change', convertIds);
+  });
+
+  /* ================= Tab 2: Unix 时间戳互转 ================= */
+  var tsInput = document.getElementById('tsInput');
+  var tsDetect = document.getElementById('tsDetect');
+  var tsResults = document.getElementById('tsResults');
+  var dtInput = document.getElementById('dtInput');
+  var dtDetect = document.getElementById('dtDetect');
+  var dtResults = document.getElementById('dtResults');
+
+  // 按 offsetHours 偏移后取 ISO 字符串格式化，offsetHours=8 即北京时间
+  function fmtTZ(ms, offsetHours) {
+    var d = new Date(ms + offsetHours * 3600000);
+    return d.toISOString().replace('T', ' ').slice(0, 19);
+  }
+
+  function detectUnit(len) {
+    if (len === 0) return null;
+    if (len <= 10) return 'sec';
+    if (len <= 14) return 'ms';
+    return 'us';
+  }
+  var UNIT_LABEL = { sec: '秒（10 位）', ms: '毫秒（13 位）', us: '微秒（16 位）' };
+
+  function renderTs() {
+    var clean = tsInput.value.replace(/\D/g, '');
+    if (!clean) {
+      tsDetect.innerHTML = '';
+      clearCards(tsResults, '输入时间戳后，这里会列出秒 / 毫秒 / 北京时间 / UTC 等全部形式，每项可单独复制。');
+      return;
+    }
+    var unit = detectUnit(clean.length);
+    var msStr, secStr;
+    if (unit === 'sec') { secStr = clean; msStr = clean + '000'; }
+    else { msStr = clean.slice(0, 13); secStr = clean.slice(0, 10); }
+    var ms = Number(msStr);
+    var d = new Date(ms);
+
+    tsDetect.innerHTML = '<span class="badge blue">识别为 ' + UNIT_LABEL[unit] + '（' + clean.length + ' 位）</span>' +
+      (isNaN(d.getTime()) ? ' <span class="badge red">超出可表示范围</span>' : '');
+
+    clearCards(tsResults, '');
+    addCard(tsResults, '10 位 · 秒', secStr);
+    addCard(tsResults, '13 位 · 毫秒', msStr);
+    addCard(tsResults, '北京时间（UTC+8）', fmtTZ(ms, 8));
+    addCard(tsResults, 'UTC 时间', fmtTZ(ms, 0));
+    addCard(tsResults, 'ISO 8601', d.toISOString());
+  }
+
+  function renderDt() {
+    var v = dtInput.value;
+    if (!v) {
+      dtDetect.innerHTML = '';
+      clearCards(dtResults, '选择日期时间后，这里会给出对应的 10 位秒和 13 位毫秒时间戳。');
+      return;
+    }
+    if (v.length === 16) v += ':00'; // 补秒
+    var ms = Date.parse(v + '+08:00'); // 明确按北京时间解析
+    if (isNaN(ms)) {
+      dtDetect.innerHTML = '<span class="badge red">日期格式不完整</span>';
+      return;
+    }
+    dtDetect.innerHTML = '<span class="badge blue">按北京时间解析：' + fmtTZ(ms, 8) + '</span>';
+    clearCards(dtResults, '');
+    addCard(dtResults, '13 位 · 毫秒', String(ms));
+    addCard(dtResults, '10 位 · 秒', String(Math.floor(ms / 1000)));
+    addCard(dtResults, 'ISO 8601（UTC）', new Date(ms).toISOString());
+  }
+
+  tsInput.addEventListener('input', renderTs);
+  dtInput.addEventListener('input', renderDt);
+
+  /* ================= Tab 3: 时间戳 SQL 转换 ================= */
+  var sqlVar    = document.getElementById('sqlVar');
+  var sqlAlias  = document.getElementById('sqlAlias');
+  var sqlUnit   = document.getElementById('sqlUnit');
+  var sqlGran   = document.getElementById('sqlGran');
+  var sqlDialect = document.getElementById('sqlDialect');
+  var sqlTz     = document.getElementById('sqlTz');
+  var sqlResults = document.getElementById('sqlResults');
+
+  var AUTO_ALIAS = { day: 'format_dt', hour: 'format_hour', minute: 'format_minute', week: 'format_week', month: 'format_month', year: 'format_year' };
+  var IMPALA_FMT = { day: 'yyyy-MM-dd', hour: 'yyyy-MM-dd HH', minute: 'yyyy-MM-dd HH:mm', month: 'yyyy-MM', year: 'yyyy' };
+  var MYSQL_FMT  = { day: '%Y-%m-%d', hour: '%Y-%m-%d %H', minute: '%Y-%m-%d %H:%i', week: '%x-W%u', month: '%Y-%m', year: '%Y' };
+  var GRAN_LABEL = { day: '日', hour: '小时', minute: '分钟', week: '周', month: '月', year: '年' };
+  var DIALECT_LABEL = { impala: 'Impala', mysql: 'MySQL' };
+
+  // from_unixtime 的第一个参数（含 /1000 与 +28800）
+  function impalaInner(v, unit, tz) {
+    var base = unit === 'ms' ? v + ' / 1000' : v;
+    return 'cast(' + base + (tz ? ' + 28800' : '') + ' as bigint)';
+  }
+  function mysqlInner(v, unit, tz) {
+    var base = unit === 'ms' ? v + ' / 1000' : v;
+    return 'from_unixtime(' + base + (tz ? ' + 28800' : '') + ')';
+  }
+
+  function impalaMain(g, inner, alias) {
+    if (g === 'week') {
+      var ts = "cast(from_unixtime(" + inner + ", 'yyyy-MM-dd HH:mm:ss') as timestamp)";
+      return "weekofyear(" + ts + ") as " + alias;
+    }
+    return "from_unixtime(" + inner + ", '" + IMPALA_FMT[g] + "') as " + alias;
+  }
+  function impalaAlt(g, inner, alias) {
+    if (g === 'week') {
+      var ts = "cast(from_unixtime(" + inner + ", 'yyyy-MM-dd HH:mm:ss') as timestamp)";
+      return "concat(cast(year(" + ts + ") as string), '-W', lpad(cast(weekofyear(" + ts + ") as string), 2, '0')) as " + alias;
+    }
+    var lenMap = { day: 10, hour: 13, minute: 16, month: 7, year: 4 };
+    return "substr(from_unixtime(" + inner + "), 1, " + lenMap[g] + ") as " + alias;
+  }
+  function mysqlMain(g, inner, alias) {
+    return "date_format(" + inner + ", '" + MYSQL_FMT[g] + "') as " + alias;
+  }
+  function mysqlAlt(g, inner, alias) {
+    switch (g) {
+      case 'day':    return "date(" + inner + ") as " + alias;
+      case 'hour':   return "date_format(" + inner + ", '%Y-%m-%d %H:00:00') as " + alias;
+      case 'minute': return "date_format(" + inner + ", '%Y-%m-%d %H:%i:00') as " + alias;
+      case 'week':   return "concat(year(" + inner + "), '-W', lpad(weekofyear(" + inner + "), 2, '0')) as " + alias;
+      case 'month':  return "concat(year(" + inner + "), '-', lpad(month(" + inner + "), 2, '0')) as " + alias;
+      case 'year':   return "year(" + inner + ") as " + alias;
+    }
+  }
+
+  function renderSql() {
+    var v = sqlVar.value.trim() || 'format_date';
+    var unit = sqlUnit.value;
+    var g = sqlGran.value;
+    var dialect = sqlDialect.value;
+    var tz = sqlTz.checked;
+    var alias = sqlAlias.value.trim() || AUTO_ALIAS[g];
+    var other = dialect === 'impala' ? 'mysql' : 'impala';
+
+    var imp = impalaInner(v, unit, tz);
+    var my = mysqlInner(v, unit, tz);
+
+    clearCards(sqlResults, '');
+    addCard(sqlResults,
+      '✅ ' + DIALECT_LABEL[dialect] + ' · 推荐写法（' + GRAN_LABEL[g] + (tz ? ' · 东八区' : ' · 不转时区') + '）',
+      dialect === 'impala' ? impalaMain(g, imp, alias) : mysqlMain(g, my, alias));
+
+    addCard(sqlResults,
+      '🔁 ' + DIALECT_LABEL[dialect] + ' · 备选写法',
+      dialect === 'impala' ? impalaAlt(g, imp, alias) : mysqlAlt(g, my, alias));
+
+    addCard(sqlResults,
+      '🔀 对照 · ' + DIALECT_LABEL[other] + ' 写法',
+      other === 'impala' ? impalaMain(g, imp, alias) : mysqlMain(g, my, alias));
+  }
+
+  [sqlVar, sqlAlias].forEach(function (el) { el.addEventListener('input', renderSql); });
+  [sqlUnit, sqlGran, sqlDialect, sqlTz].forEach(function (el) { el.addEventListener('change', renderSql); });
+
+  // 初始渲染（默认值即用户示例）
+  renderSql();
+
+  /* ================= Tab 4: 时间分区筛选 ================= */
+  var pfDialect = document.getElementById('pfDialect');
+  var pfType = document.getElementById('pfType');
+  var pfUnit = document.getElementById('pfUnit');
+  var pfFmt = document.getElementById('pfFmt');
+  var pfFmtCustom = document.getElementById('pfFmtCustom');
+  var pfNow = document.getElementById('pfNow');
+  var pfPreset = document.getElementById('pfPreset');
+  var pfStart = document.getElementById('pfStart');
+  var pfEnd = document.getElementById('pfEnd');
+  var pfField = document.getElementById('pfField');
+  var pfResults = document.getElementById('pfResults');
+
+  // Java/Impala 风格格式 → MySQL DATE_FORMAT 符号
+  function mysqlFmtPattern(f) {
+    return f.replace(/yyyy/g, '%Y').replace(/yy/g, '%y')
+            .replace(/MM/g, '%m').replace(/dd/g, '%d')
+            .replace(/HH/g, '%H').replace(/hh/g, '%h')
+            .replace(/mm/g, '%i').replace(/ss/g, '%s');
+  }
+
+  // 今天 - n 天 的日期表达式（alt 为真时用备选函数名/运算符写法）
+  function pfDateMinus(dialect, n, alt) {
+    if (dialect === 'impala') {
+      if (n === 0) return 'CURRENT_DATE()';
+      if (n < 0) return (alt ? 'days_add(CURRENT_DATE(), ' : 'DATE_ADD(CURRENT_DATE(), ') + (-n) + ')';
+      return (alt ? 'days_sub(CURRENT_DATE(), ' : 'DATE_SUB(CURRENT_DATE(), ') + n + ')';
+    }
+    if (n === 0) return alt ? 'CURRENT_DATE()' : 'CURDATE()';
+    if (n < 0) return 'DATE_ADD(' + (alt ? 'CURRENT_DATE()' : 'CURDATE()') + ', INTERVAL ' + (-n) + ' DAY)';
+    return alt
+      ? 'CURRENT_DATE() - INTERVAL ' + n + ' DAY'
+      : 'DATE_SUB(CURDATE(), INTERVAL ' + n + ' DAY)';
+  }
+
+  function pfNowExpr(dialect, alt) {
+    if (dialect === 'impala') return alt ? 'current_timestamp()' : 'NOW()';
+    return alt ? 'CURRENT_TIMESTAMP()' : 'NOW()';
+  }
+
+  // 区间边界表达式：偏移 0 时为今天零点（或 NOW()），否则为偏移日期
+  function pfBoundary(dialect, offset, useNow, alt) {
+    if (offset === 0) return useNow ? pfNowExpr(dialect, alt) : pfDateMinus(dialect, 0, alt);
+    return pfDateMinus(dialect, offset, alt);
+  }
+
+  // 把日期表达式包装成目标类型的值：unix 时间戳 / 格式化字符串
+  function pfValueExpr(dialect, type, unit, fmt, expr) {
+    if (type === 'ts') return 'UNIX_TIMESTAMP(' + expr + ')' + (unit === 'ms' ? ' * 1000' : '');
+    if (dialect === 'impala') return "FROM_TIMESTAMP(" + expr + ", '" + fmt + "')";
+    return "DATE_FORMAT(" + expr + ", '" + mysqlFmtPattern(fmt) + "')";
+  }
+
+  function pfCond(field, op, expr) {
+    return field ? field + ' ' + op + ' ' + expr : expr;
+  }
+
+  function renderPf() {
+    var dialect = pfDialect.value;
+    var type = pfType.value;
+    var unit = pfUnit.value;
+    var useNow = pfNow.checked;
+    var start = parseInt(pfStart.value, 10); if (isNaN(start)) start = 0;
+    var end = parseInt(pfEnd.value, 10); if (isNaN(end)) end = 0;
+    var field = pfField.value.trim();
+    var fmt = pfFmt.value === 'custom' ? (pfFmtCustom.value.trim() || 'yyyy-MM-dd') : pfFmt.value;
+    var other = dialect === 'impala' ? 'mysql' : 'impala';
+
+    function build(d, alt) {
+      var s = pfValueExpr(d, type, unit, fmt, pfBoundary(d, start, false, alt));
+      var e = pfValueExpr(d, type, unit, fmt, pfBoundary(d, end, useNow, alt));
+      return pfCond(field, '>=', s) + ' AND ' + pfCond(field, '<', e);
+    }
+
+    clearCards(pfResults, '');
+    var useNowTag = (useNow && end === 0) ? '（NOW 实时边界）' : '';
+    addCard(pfResults, '✅ ' + DIALECT_LABEL[dialect] + ' · 推荐写法' + useNowTag, build(dialect, false));
+    addCard(pfResults, '🔁 ' + DIALECT_LABEL[dialect] + ' · 备选写法', build(dialect, true));
+    addCard(pfResults, '🔀 对照 · ' + DIALECT_LABEL[other] + ' 写法', build(other, false));
+
+    // 字符串日期且区间恰好一天 → 额外给等值写法（静态分区最友好）
+    if (type === 'str' && start - end === 1) {
+      var oneDay = pfValueExpr(dialect, type, unit, fmt, pfBoundary(dialect, start, false, false));
+      addCard(pfResults, '🎯 等值写法（区间恰好一天，分区裁剪最友好）', pfCond(field, '=', oneDay));
+    }
+  }
+
+  function syncPfVis() {
+    document.getElementById('pfUnitWrap').style.display = pfType.value === 'ts' ? '' : 'none';
+    document.getElementById('pfFmtWrap').style.display = pfType.value === 'str' ? '' : 'none';
+    pfFmtCustom.style.display = pfFmt.value === 'custom' ? '' : 'none';
+  }
+
+  pfPreset.addEventListener('change', function () {
+    if (this.value !== 'custom') {
+      var p = this.value.split(',');
+      pfStart.value = p[0];
+      pfEnd.value = p[1];
+    }
+    renderPf();
+  });
+  [pfStart, pfEnd, pfField, pfFmtCustom].forEach(function (el) {
+    el.addEventListener('input', function () {
+      if (el === pfStart || el === pfEnd) pfPreset.value = 'custom';
+      renderPf();
+    });
+  });
+  [pfDialect, pfType, pfUnit, pfFmt, pfNow].forEach(function (el) {
+    el.addEventListener('change', function () { syncPfVis(); renderPf(); });
+  });
+
+  syncPfVis();
+  renderPf();
+
+  /* ================= Tab 5: 表头字段生成器 ================= */
+  var HDR_BEHAVIORS = { active: '活跃', enter_room: '进房', send_gift: '送礼', receive_gift: '收礼', recharge: '充值' };
+  var HDR_PREFIX_CN = { user: '用户', anchor: '主播', guild: '公会', room: '房间' };
+  var HDR_TIME_COLS = [
+    ['hdrTDay', 'format_dt', '日期分区, yyyy-MM-dd'],
+    ['hdrTWeek', 'week_start', '自然周(周一), yyyy-MM-dd'],
+    ['hdrTMonth', 'format_month', '自然月, yyyy-MM'],
+    ['hdrTHour', 'format_hour', '小时, yyyy-MM-dd HH']
+  ];
+  var HDR_CTRL_IDS = [
+    'hdrTDay', 'hdrTWeek', 'hdrTMonth', 'hdrTHour', 'hdrMode',
+    'hdrE_userId', 'hdrE_userName', 'hdrE_picoid', 'hdrE_anchorId', 'hdrE_anchorName',
+    'hdrE_guildId', 'hdrE_guildName', 'hdrE_roomId', 'hdrE_roomName', 'hdrE_roomNumber',
+    'hdrB_active_uv', 'hdrB_active_pv', 'hdrB_enter_room_uv', 'hdrB_enter_room_pv',
+    'hdrB_send_gift_uv', 'hdrB_send_gift_pv', 'hdrB_receive_gift_uv', 'hdrB_receive_gift_pv',
+    'hdrB_recharge_uv', 'hdrB_recharge_pv',
+    'hdrDurRoom', 'hdrDurLive', 'hdrScope', 'hdrSplitNew',
+    'hdrRateRoom', 'hdrRateGift', 'hdrRatePay', 'hdrCustom'
+  ];
+  var HDR_DEFAULTS = {
+    time: ['hdrTDay'], mode: 'wide',
+    entities: ['hdrE_userId', 'hdrE_userName', 'hdrE_picoid'],
+    matrix: ['hdrB_active_uv', 'hdrB_send_gift_uv', 'hdrB_send_gift_pv', 'hdrB_recharge_uv'],
+    dur: [], scope: 'all', split: false, rates: [], custom: ''
+  };
+  var HDR_PRESETS = {
+    giftDailyType:  { time: ['hdrTDay'], mode: 'type',
+      entities: ['hdrE_userId', 'hdrE_userName', 'hdrE_picoid'],
+      matrix: ['hdrB_send_gift_uv', 'hdrB_send_gift_pv'],
+      dur: [], scope: 'all', split: false, rates: [], custom: '' },
+    anchorLiveWide: { time: ['hdrTDay'], mode: 'wide',
+      entities: ['hdrE_anchorId', 'hdrE_anchorName', 'hdrE_guildId', 'hdrE_guildName'],
+      matrix: ['hdrB_active_uv', 'hdrB_recharge_uv'],
+      dur: ['hdrDurLive'], scope: 'all', split: false, rates: ['hdrRatePay'], custom: '' },
+    guildMonth:     { time: ['hdrTMonth'], mode: 'wide',
+      entities: ['hdrE_guildId', 'hdrE_guildName'],
+      matrix: ['hdrB_recharge_uv', 'hdrB_recharge_pv'],
+      dur: [], scope: 'all', split: false, rates: ['hdrRatePay'], custom: '' },
+    roomDaily:      { time: ['hdrTDay'], mode: 'wide',
+      entities: ['hdrE_roomId', 'hdrE_roomName', 'hdrE_roomNumber'],
+      matrix: ['hdrB_enter_room_uv', 'hdrB_enter_room_pv'],
+      dur: [], scope: 'all', split: false, rates: ['hdrRateRoom'], custom: '' }
+  };
+
+  function hdrVal(id) { return document.getElementById(id); }
+  var hdrExcluded = {};
+
+  function hdrCollectFields() {
+    var f = [];
+    function push(n, c) { f.push({ n: n, c: c }); }
+    var isType = hdrVal('hdrMode').value === 'type';
+
+    // 1 时间维度
+    HDR_TIME_COLS.forEach(function (t) { if (hdrVal(t[0]).checked) push(t[1], t[2]); });
+
+    // 2 口径（非默认时输出注释行）
+    var scope = hdrVal('hdrScope').value;
+    if (scope === 'new') push(null, '-- 口径: 仅当日新增');
+    else if (scope === 'old') push(null, '-- 口径: 仅非首日');
+
+    var hasUser = hdrVal('hdrE_userId').checked || hdrVal('hdrE_userName').checked || hdrVal('hdrE_picoid').checked;
+    var hasAnchor = hdrVal('hdrE_anchorId').checked || hdrVal('hdrE_anchorName').checked;
+    var typeRow = isType && (hasUser || hasAnchor);
+
+    // 3 实体列
+    if (!isType) {
+      if (hdrVal('hdrE_userId').checked) push('user_id', '用户ID');
+      if (hdrVal('hdrE_userName').checked) push('user_name', '用户昵称(昨日分区最新)');
+      if (hdrVal('hdrE_picoid').checked) push('user_picoid', '用户PicoID');
+    } else {
+      if (typeRow) push('user_id', 'ID(按type区分用户/主播)');
+      if (hdrVal('hdrE_userName').checked) push('user_name', '昵称(昨日分区最新)');
+      if (hdrVal('hdrE_picoid').checked) push('picoid', 'PicoID');
+      if (typeRow) push('type', 'user/anchor');
+    }
+    if (!isType && hdrVal('hdrE_anchorId').checked) push('anchor_id', '主播ID');
+    if (!isType && hdrVal('hdrE_anchorName').checked) push('anchor_name', '主播昵称(昨日分区最新)');
+    if (hdrVal('hdrE_guildId').checked) push('guild_id', '公会ID');
+    if (hdrVal('hdrE_guildName').checked) push('guild_name', '公会名称');
+    if (hdrVal('hdrE_roomId').checked) push('room_id', '房间ID');
+    if (hdrVal('hdrE_roomName').checked) push('room_name', '房间名称');
+    if (hdrVal('hdrE_roomNumber').checked) push('room_number', '房间号');
+
+    // 4 新老拆分（两种模式统一为 user_type 列）
+    if (hdrVal('hdrSplitNew').checked) push('user_type', 'new=当日新增 / old=非首日');
+
+    // 5 行为 × 指标
+    var on = [];
+    Object.keys(HDR_BEHAVIORS).forEach(function (b) {
+      ['uv', 'pv'].forEach(function (m) {
+        if (hdrVal('hdrB_' + b + '_' + m).checked) on.push({ b: b, m: m });
+      });
+    });
+    if (isType) {
+      on.forEach(function (x) { push(x.b + '_' + x.m, HDR_BEHAVIORS[x.b] + x.m.toUpperCase()); });
+    } else {
+      var prefixes = [];
+      if (hasUser) prefixes.push('user');
+      if (hasAnchor) prefixes.push('anchor');
+      if (hdrVal('hdrE_guildId').checked || hdrVal('hdrE_guildName').checked) prefixes.push('guild');
+      if (hdrVal('hdrE_roomId').checked || hdrVal('hdrE_roomName').checked || hdrVal('hdrE_roomNumber').checked) prefixes.push('room');
+      if (!prefixes.length) prefixes.push('');
+      on.forEach(function (x) {
+        prefixes.forEach(function (p) {
+          push((p ? p + '_' : '') + x.b + '_' + x.m,
+               (p ? HDR_PREFIX_CN[p] : '') + HDR_BEHAVIORS[x.b] + x.m.toUpperCase());
+        });
+      });
+    }
+
+    // 6 时长指标（固定挂正确实体侧）
+    if (hdrVal('hdrDurRoom').checked) {
+      if (isType) push('in_room_duration', '在房时长(秒)');
+      else push('user_in_room_duration', '用户在房时长(秒)');
+    }
+    if (hdrVal('hdrDurLive').checked) {
+      if (isType) push('live_duration', '开播时长(秒)');
+      else push('anchor_live_duration', '主播开播时长(秒)');
+    }
+
+    // 7 比例指标
+    if (hdrVal('hdrRateRoom').checked) push('enter_room_rate', '进房率 = enter_room_uv / active_uv');
+    if (hdrVal('hdrRateGift').checked) push('enter_room_gift_rate', '进房送礼率 = send_gift_uv / enter_room_uv');
+    if (hdrVal('hdrRatePay').checked) push('recharge_rate', '付费转化率 = recharge_uv / active_uv');
+
+    // 8 追加自定义字段
+    hdrVal('hdrCustom').value.split(/[\s,，;；]+/).forEach(function (s) {
+      s = s.trim();
+      if (s) push(s, null);
+    });
+    return f;
+  }
+
+  function renderHdr() {
+    var fields = hdrCollectFields();
+    var box = hdrVal('hdrChips');
+    var withComment = hdrVal('hdrComment').checked;
+    box.innerHTML = '';
+    var shown = 0, removed = 0;
+    fields.forEach(function (f) {
+      if (f.n !== null && hdrExcluded[f.n]) { removed++; return; }
+      shown++;
+      var span = document.createElement('span');
+      if (f.n === null) {
+        span.className = 'chip chip-note';
+        span.textContent = f.c;
+        box.appendChild(span);
+        return;
+      }
+      span.className = 'chip';
+      var code = document.createElement('code');
+      code.textContent = f.n;
+      span.appendChild(code);
+      if (withComment && f.c) {
+        var em = document.createElement('em');
+        em.textContent = '-- ' + f.c;
+        span.appendChild(em);
+      }
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = '×';
+      btn.title = '删除该字段';
+      btn.addEventListener('click', function () {
+        hdrExcluded[f.n] = true;
+        renderHdr();
+      });
+      span.appendChild(btn);
+      box.appendChild(span);
+    });
+    if (!shown && !removed) {
+      box.innerHTML = '<div class="empty-tip">勾选上方选项，字段会实时出现在这里，点 × 可临时删减</div>';
+    }
+    hdrVal('hdrStats').innerHTML =
+      '<span class="badge blue">字段 ' + shown + ' 个</span>' +
+      (removed ? '<span class="badge amber">已删减 ' + removed + ' 个</span>' : '');
+    hdrSaveState();
+  }
+
+  function hdrApplyConfig(cfg) {
+    HDR_CTRL_IDS.forEach(function (id) {
+      var el = hdrVal(id);
+      if (el.type === 'checkbox') el.checked = false;
+    });
+    cfg.time.forEach(function (id) { hdrVal(id).checked = true; });
+    hdrVal('hdrMode').value = cfg.mode;
+    cfg.entities.forEach(function (id) { hdrVal(id).checked = true; });
+    cfg.matrix.forEach(function (id) { hdrVal(id).checked = true; });
+    cfg.dur.forEach(function (id) { hdrVal(id).checked = true; });
+    cfg.rates.forEach(function (id) { hdrVal(id).checked = true; });
+    hdrVal('hdrSplitNew').checked = cfg.split;
+    hdrVal('hdrScope').value = cfg.scope;
+    hdrVal('hdrCustom').value = cfg.custom || '';
+    hdrExcluded = {};
+    renderHdr();
+  }
+
+  function hdrSaveState() {
+    try {
+      var st = {};
+      HDR_CTRL_IDS.concat(['hdrComment']).forEach(function (id) {
+        var el = hdrVal(id);
+        st[id] = el.type === 'checkbox' ? el.checked : el.value;
+      });
+      st.__ex = Object.keys(hdrExcluded);
+      localStorage.setItem('hdrState', JSON.stringify(st));
+    } catch (e) {}
+  }
+
+  (function hdrInit() {
+    try {
+      var st = JSON.parse(localStorage.getItem('hdrState') || 'null');
+      if (st) {
+        HDR_CTRL_IDS.concat(['hdrComment']).forEach(function (id) {
+          if (!(id in st)) return;
+          var el = hdrVal(id);
+          if (el.type === 'checkbox') el.checked = st[id];
+          else el.value = st[id];
+        });
+        (st.__ex || []).forEach(function (n) { hdrExcluded[n] = true; });
+      }
+    } catch (e) {}
+    renderHdr();
+  })();
+
+  HDR_CTRL_IDS.forEach(function (id) {
+    var el = hdrVal(id);
+    el.addEventListener(el.tagName === 'SELECT' || el.type === 'checkbox' ? 'change' : 'input', function () {
+      hdrExcluded = {};
+      renderHdr();
+    });
+  });
+  hdrVal('hdrComment').addEventListener('change', renderHdr);
+
+  hdrVal('hdrPreset').addEventListener('change', function () {
+    if (this.value) {
+      hdrApplyConfig(HDR_PRESETS[this.value]);
+      this.value = '';
+    }
+  });
+  hdrVal('hdrCopyBtn').addEventListener('click', function () {
+    var withComment = hdrVal('hdrComment').checked;
+    var lines = [];
+    hdrCollectFields().forEach(function (f) {
+      if (f.n === null) { lines.push(f.c); return; }
+      if (hdrExcluded[f.n]) return;
+      lines.push(withComment && f.c ? f.n + ' -- ' + f.c : f.n);
+    });
+    if (lines.length) copyText(lines.join('\n'), this);
+  });
+  hdrVal('hdrRestoreBtn').addEventListener('click', function () {
+    hdrExcluded = {};
+    renderHdr();
+  });
+  hdrVal('hdrResetBtn').addEventListener('click', function () {
+    hdrApplyConfig(HDR_DEFAULTS);
+  });
+})();
+</script>
+</body>
+</html>
